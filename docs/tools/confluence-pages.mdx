@@ -16,6 +16,7 @@ Get content of a specific Confluence page by its ID, or by its title and space k
 | `space_key` | `string` | No | The key of the Confluence space where the page resides (e.g., 'DEV', 'TEAM'). Required if using 'title'. |
 | `include_metadata` | `boolean` | No | Whether to include page metadata such as creation date, last update, version, and labels. |
 | `convert_to_markdown` | `boolean` | No | Whether to convert page to markdown (true) or return raw Confluence storage XHTML (false). Storage output preserves macros and task metadata for safe round-tripping, but CAUTION: it significantly increases token usage in AI responses. |
+| `content_format` | `string` | No | (Optional) Explicit page body format override. Options: 'markdown', 'storage', or 'atlas_doc_format'. When provided, this overrides `convert_to_markdown`. |
 **Example:**
 
 ```json
@@ -24,6 +25,7 @@ Get content of a specific Confluence page by its ID, or by its title and space k
 
 <Tip>
 Content is returned in Markdown format by default. Set `convert_to_markdown` to `false` to retrieve exact Confluence storage XHTML when macro preservation matters.
+Use `content_format: "atlas_doc_format"` on Confluence Cloud pages when you need smart-link and datasource metadata preserved for round-tripping.
 </Tip>
 
 
@@ -41,9 +43,9 @@ Create a new Confluence page.
 |-----------|------|----------|-------------|
 | `space_key` | `string` | Yes | The key of the space to create the page in (usually a short uppercase code like 'DEV', 'TEAM', or 'DOC') |
 | `title` | `string` | Yes | The title of the page |
-| `content` | `string` | Yes | The content of the page. Format depends on content_format parameter. Can be Markdown (default), wiki markup, or storage format |
+| `content` | `string` | Yes | The content of the page. Format depends on content_format parameter. Can be Markdown (default), wiki markup, storage format, or atlas_doc_format JSON |
 | `parent_id` | `string` | No | (Optional) parent page ID. If provided, this page will be created as a child of the specified page |
-| `content_format` | `string` | No | (Optional) The format of the content parameter. Options: 'markdown' (default), 'wiki', or 'storage'. Wiki format uses Confluence wiki markup syntax |
+| `content_format` | `string` | No | (Optional) The format of the content parameter. Options: 'markdown' (default), 'wiki', 'storage', or 'atlas_doc_format'. Wiki format uses Confluence wiki markup syntax |
 | `enable_heading_anchors` | `boolean` | No | (Optional) Whether to enable automatic heading anchor generation. Only applies when content_format is 'markdown' |
 | `include_content` | `boolean` | No | (Optional) Whether to include page content in the response. Defaults to false since callers already have the content at create time. |
 | `emoji` | `string` | No | (Optional) Page title emoji (icon shown in navigation). Can be any emoji character like '📝', '🚀', '📚'. Set to null/None to remove. |
@@ -76,7 +78,7 @@ Update an existing Confluence page.
 | `is_minor_edit` | `boolean` | No | Whether this is a minor edit |
 | `version_comment` | `string` | No | Optional comment for this version |
 | `parent_id` | `string` | No | Optional the new parent page ID |
-| `content_format` | `string` | No | (Optional) The format of the content parameter. Options: 'markdown' (default), 'wiki', or 'storage'. Wiki format uses Confluence wiki markup syntax |
+| `content_format` | `string` | No | (Optional) The format of the content parameter. Options: 'markdown' (default), 'wiki', 'storage', or 'atlas_doc_format'. Wiki format uses Confluence wiki markup syntax |
 | `enable_heading_anchors` | `boolean` | No | (Optional) Whether to enable automatic heading anchor generation. Only applies when content_format is 'markdown' |
 | `include_content` | `boolean` | No | (Optional) Whether to include page content in the response. Defaults to false since callers already have the content at update time. |
 | `emoji` | `string` | No | (Optional) Page title emoji (icon shown in navigation). Can be any emoji character like '📝', '🚀', '📚'. Set to null/None to remove. |

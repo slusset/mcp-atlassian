@@ -440,6 +440,37 @@ async def test_get_page_no_markdown(client, mock_confluence_fetcher):
 
 
 @pytest.mark.anyio
+async def test_get_page_atlas_doc_format(client, mock_confluence_fetcher):
+    """Test get_page with explicit atlas_doc_format output."""
+    mock_page_adf = MagicMock(spec=ConfluencePage)
+    mock_page_adf.to_simplified_dict.return_value = {
+        "id": "123456",
+        "title": "Test Page ADF",
+        "url": "https://example.com/adf",
+        "content": '{"type":"doc","version":1,"content":[]}',
+        "content_format": "atlas_doc_format",
+    }
+    mock_page_adf.content = '{"type":"doc","version":1,"content":[]}'
+    mock_page_adf.content_format = "atlas_doc_format"
+    mock_confluence_fetcher.get_page_content.return_value = mock_page_adf
+
+    response = await client.call_tool(
+        "confluence_get_page",
+        {"page_id": "123456", "content_format": "atlas_doc_format"},
+    )
+
+    mock_confluence_fetcher.get_page_content.assert_called_once_with(
+        "123456",
+        convert_to_markdown=True,
+        content_format="atlas_doc_format",
+    )
+
+    result_data = json.loads(response.content[0].text)
+    assert result_data["metadata"]["content"] == '{"type":"doc","version":1,"content":[]}'
+    assert result_data["metadata"]["content_format"] == "atlas_doc_format"
+
+
+@pytest.mark.anyio
 async def test_get_page_children(client, mock_confluence_fetcher):
     """Test the get_page_children tool."""
     response = await client.call_tool(
@@ -726,6 +757,31 @@ async def test_update_page_include_content(client, mock_confluence_fetcher):
     assert result_data["message"] == "Page updated successfully"
     assert result_data["page"]["title"] == "Test Page Mock Title"
     assert "content" in result_data["page"]
+
+
+@pytest.mark.anyio
+async def test_update_page_atlas_doc_format(client, mock_confluence_fetcher):
+    """Test update_page with explicit atlas_doc_format content."""
+    response = await client.call_tool(
+        "confluence_update_page",
+        {
+            "page_id": "999999",
+            "title": "Updated Page",
+            "content": '{"type":"doc","version":1,"content":[]}',
+            "content_format": "atlas_doc_format",
+        },
+    )
+
+    mock_confluence_fetcher.update_page.assert_called_once()
+    call_kwargs = mock_confluence_fetcher.update_page.call_args.kwargs
+    assert call_kwargs["page_id"] == "999999"
+    assert call_kwargs["title"] == "Updated Page"
+    assert call_kwargs["body"] == '{"type":"doc","version":1,"content":[]}'
+    assert call_kwargs["is_markdown"] is False
+    assert call_kwargs["content_representation"] == "atlas_doc_format"
+
+    result_data = json.loads(response.content[0].text)
+    assert result_data["message"] == "Page updated successfully"
 
 
 @pytest.mark.anyio

@@ -158,6 +158,47 @@ class TestPagesMixin:
         assert result.content == original_storage
         pages_mixin.preprocessor.process_html_content.assert_not_called()
 
+    def test_get_page_content_atlas_doc_format_uses_v2_for_cloud_basic(
+        self, pages_mixin
+    ):
+        """Cloud basic auth should use v2 when atlas_doc_format is requested."""
+        page_id = "987654321"
+        pages_mixin.config.url = "https://example.atlassian.net/wiki"
+        pages_mixin.config.auth_type = "basic"
+
+        with patch(
+            "mcp_atlassian.confluence.pages.ConfluenceV2Adapter"
+        ) as mock_v2_adapter_class:
+            mock_v2_adapter = MagicMock()
+            mock_v2_adapter_class.return_value = mock_v2_adapter
+            mock_v2_adapter.get_page.return_value = {
+                "id": page_id,
+                "title": "ADF Page",
+                "body": {
+                    "atlas_doc_format": {
+                        "value": '{"type":"doc","version":1,"content":[]}'
+                    }
+                },
+                "space": {"key": "PROJ", "name": "Project"},
+                "version": {"number": 1},
+            }
+            mock_v2_adapter.get_page_emoji.return_value = None
+
+            result = pages_mixin.get_page_content(
+                page_id,
+                convert_to_markdown=False,
+                content_format="atlas_doc_format",
+            )
+
+            mock_v2_adapter.get_page.assert_called_once_with(
+                page_id=page_id,
+                expand="body.storage,version,space,children.attachment",
+                body_format="atlas_doc_format",
+            )
+            pages_mixin.confluence.get_page_by_id.assert_not_called()
+            assert result.content == '{"type":"doc","version":1,"content":[]}'
+            assert result.content_format == "atlas_doc_format"
+
     def test_get_page_by_title_success(self, pages_mixin):
         """Test getting a page by title when it exists."""
         # Setup
@@ -498,6 +539,52 @@ class TestPagesMixin:
 
             mock_get_width.assert_not_called()
             mock_set_width.assert_called_once_with(page_id, "default")
+            assert result.id == page_id
+
+    def test_update_page_atlas_doc_format_uses_v2_for_cloud_basic(self, pages_mixin):
+        """Cloud basic auth should use v2 updates for atlas_doc_format."""
+        page_id = "987654321"
+        title = "ADF Page"
+        body = '{"type":"doc","version":1,"content":[]}'
+
+        mock_document = ConfluencePage(
+            id=page_id,
+            title=title,
+            content=body,
+            content_format="atlas_doc_format",
+            version={"number": 1},
+        )
+        with (
+            patch(
+                "mcp_atlassian.confluence.pages.ConfluenceV2Adapter"
+            ) as mock_v2_adapter_class,
+            patch.object(pages_mixin, "get_page_content", return_value=mock_document),
+            patch.object(pages_mixin, "_get_page_width", return_value="full-width"),
+            patch.object(pages_mixin, "_set_page_width") as mock_set_width,
+        ):
+            pages_mixin.config.url = "https://example.atlassian.net/wiki"
+            pages_mixin.config.auth_type = "basic"
+            mock_v2_adapter = MagicMock()
+            mock_v2_adapter_class.return_value = mock_v2_adapter
+            mock_v2_adapter.update_page.return_value = {"id": page_id, "title": title}
+
+            result = pages_mixin.update_page(
+                page_id,
+                title,
+                body,
+                is_markdown=False,
+                content_representation="atlas_doc_format",
+            )
+
+            mock_v2_adapter.update_page.assert_called_once_with(
+                page_id=page_id,
+                title=title,
+                body=body,
+                representation="atlas_doc_format",
+                version_comment="",
+            )
+            pages_mixin.confluence.update_page.assert_not_called()
+            mock_set_width.assert_called_once_with(page_id, "full-width")
             assert result.id == page_id
 
     def test_update_page_with_wiki_format(self, pages_mixin):
@@ -1585,7 +1672,9 @@ class TestPagesOAuthMixin:
 
             # Assert that v2 API was used instead of v1
             mock_v2_adapter.get_page.assert_called_once_with(
-                page_id=page_id, expand="body.storage,version,space,children.attachment"
+                page_id=page_id,
+                expand="body.storage,version,space,children.attachment",
+                body_format="storage",
             )
 
             # Verify v1 API was NOT called

@@ -179,6 +179,16 @@ async def get_page(
             default=True,
         ),
     ] = True,
+    content_format: Annotated[
+        str | None,
+        Field(
+            description=(
+                "(Optional) Explicit page body format to return. Options: 'markdown', 'storage', or "
+                "'atlas_doc_format'. When provided, this overrides convert_to_markdown."
+            ),
+            default=None,
+        ),
+    ] = None,
 ) -> str:
     """Get content of a specific Confluence page by its ID, or by its title and space key.
 
@@ -188,7 +198,8 @@ async def get_page(
         title: The exact title of the page. Must be used with 'space_key'.
         space_key: The key of the space. Must be used with 'title'.
         include_metadata: Whether to include page metadata.
-        convert_to_markdown: Convert content to markdown (true) or keep raw HTML (false).
+        convert_to_markdown: Convert content to markdown (true) or keep raw storage (false).
+        content_format: Explicit content format override.
 
     Returns:
         JSON string representing the page content and/or metadata, or an error if not found or parameters are invalid.
@@ -203,8 +214,11 @@ async def get_page(
             )
         try:
             page_id_str = str(page_id)
+            get_page_kwargs = {"convert_to_markdown": convert_to_markdown}
+            if content_format is not None:
+                get_page_kwargs["content_format"] = content_format
             page_object = confluence_fetcher.get_page_content(
-                page_id_str, convert_to_markdown=convert_to_markdown
+                page_id_str, **get_page_kwargs
             )
         except Exception as e:
             logger.error(f"Error fetching page by ID '{page_id}': {e}")
@@ -214,8 +228,11 @@ async def get_page(
                 ensure_ascii=False,
             )
     elif title and space_key:
+        get_page_by_title_kwargs = {"convert_to_markdown": convert_to_markdown}
+        if content_format is not None:
+            get_page_by_title_kwargs["content_format"] = content_format
         page_object = confluence_fetcher.get_page_by_title(
-            space_key, title, convert_to_markdown=convert_to_markdown
+            space_key, title, **get_page_by_title_kwargs
         )
         if not page_object:
             return json.dumps(
@@ -594,9 +611,10 @@ async def create_page(
     confluence_fetcher = await get_confluence_fetcher(ctx)
 
     # Validate content_format
-    if content_format not in ["markdown", "wiki", "storage"]:
+    if content_format not in ["markdown", "wiki", "storage", "atlas_doc_format"]:
         raise ValueError(
-            f"Invalid content_format: {content_format}. Must be 'markdown', 'wiki', or 'storage'"
+            "Invalid content_format: "
+            f"{content_format}. Must be 'markdown', 'wiki', 'storage', or 'atlas_doc_format'"
         )
 
     # Determine parameters based on content format
@@ -605,7 +623,7 @@ async def create_page(
         content_representation = None  # Will be converted to storage
     else:
         is_markdown = False
-        content_representation = content_format  # Pass 'wiki' or 'storage' directly
+        content_representation = content_format  # Pass supported representation directly
 
     page = confluence_fetcher.create_page(
         space_key=space_key,
@@ -708,9 +726,10 @@ async def update_page(
     confluence_fetcher = await get_confluence_fetcher(ctx)
 
     # Validate content_format
-    if content_format not in ["markdown", "wiki", "storage"]:
+    if content_format not in ["markdown", "wiki", "storage", "atlas_doc_format"]:
         raise ValueError(
-            f"Invalid content_format: {content_format}. Must be 'markdown', 'wiki', or 'storage'"
+            "Invalid content_format: "
+            f"{content_format}. Must be 'markdown', 'wiki', 'storage', or 'atlas_doc_format'"
         )
 
     # Determine parameters based on content format
@@ -719,7 +738,7 @@ async def update_page(
         content_representation = None  # Will be converted to storage
     else:
         is_markdown = False
-        content_representation = content_format  # Pass 'wiki' or 'storage' directly
+        content_representation = content_format  # Pass supported representation directly
 
     updated_page = confluence_fetcher.update_page(
         page_id=page_id,
