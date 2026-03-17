@@ -173,8 +173,8 @@ async def get_page(
         Field(
             description=(
                 "Whether to convert page to markdown (true) or return raw Confluence storage XHTML (false). "
-                "Storage output preserves macros and task metadata for safe round-tripping, but CAUTION: "
-                "it significantly increases token usage in AI responses."
+                "Storage output preserves macros, embedded Jira render modes, page layout, and task metadata "
+                "for safe round-tripping, but CAUTION: it significantly increases token usage in AI responses."
             ),
             default=True,
         ),
@@ -184,7 +184,9 @@ async def get_page(
         Field(
             description=(
                 "(Optional) Explicit page body format to return. Options: 'markdown', 'storage', or "
-                "'atlas_doc_format'. When provided, this overrides convert_to_markdown."
+                "'atlas_doc_format'. Use 'storage' to preserve Confluence macro/layout metadata and "
+                "'atlas_doc_format' for Confluence Cloud ADF pages when smart-link or datasource display "
+                "metadata must round-trip unchanged. When provided, this overrides convert_to_markdown."
             ),
             default=None,
         ),
@@ -549,7 +551,12 @@ async def create_page(
     content: Annotated[
         str,
         Field(
-            description="The content of the page. Format depends on content_format parameter. Can be Markdown (default), wiki markup, or storage format"
+            description=(
+                "The content of the page. Format depends on content_format parameter. "
+                "Can be Markdown (default), wiki markup, storage format, or atlas_doc_format "
+                "JSON. Use storage or atlas_doc_format when retransmitting existing page "
+                "structure and render metadata."
+            )
         ),
     ],
     parent_id: Annotated[
@@ -563,7 +570,13 @@ async def create_page(
     content_format: Annotated[
         str,
         Field(
-            description="(Optional) The format of the content parameter. Options: 'markdown' (default), 'wiki', or 'storage'. Wiki format uses Confluence wiki markup syntax",
+            description=(
+                "(Optional) The format of the content parameter. Options: 'markdown' "
+                "(default), 'wiki', 'storage', or 'atlas_doc_format'. Wiki format uses "
+                "Confluence wiki markup syntax. Choose 'storage' for Confluence macro/layout "
+                "round-tripping and 'atlas_doc_format' for Confluence Cloud ADF pages when "
+                "smart-link, datasource, or embedded Jira display metadata must be preserved."
+            ),
             default="markdown",
         ),
     ] = "markdown",
@@ -661,7 +674,11 @@ async def update_page(
     content: Annotated[
         str,
         Field(
-            description="The new content of the page. Format depends on content_format parameter"
+            description=(
+                "The new content of the page. Format depends on content_format parameter. "
+                "Use storage or atlas_doc_format when retransmitting existing page structure "
+                "and render metadata."
+            )
         ),
     ],
     is_minor_edit: Annotated[
@@ -678,7 +695,13 @@ async def update_page(
     content_format: Annotated[
         str,
         Field(
-            description="(Optional) The format of the content parameter. Options: 'markdown' (default), 'wiki', or 'storage'. Wiki format uses Confluence wiki markup syntax",
+            description=(
+                "(Optional) The format of the content parameter. Options: 'markdown' "
+                "(default), 'wiki', 'storage', or 'atlas_doc_format'. Wiki format uses "
+                "Confluence wiki markup syntax. Choose 'storage' for Confluence macro/layout "
+                "round-tripping and 'atlas_doc_format' for Confluence Cloud ADF pages when "
+                "smart-link, datasource, or embedded Jira display metadata must be preserved."
+            ),
             default="markdown",
         ),
     ] = "markdown",
