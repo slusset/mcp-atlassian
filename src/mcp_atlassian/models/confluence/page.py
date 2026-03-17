@@ -161,9 +161,10 @@ class ConfluencePage(ApiModel, TimestampMixin):
             if content_format in body:
                 content = body.get(content_format, {}).get("value", EMPTY_STRING)
 
-        # Adjust content_format if convert_to_markdown is False and content is processed HTML
+        # Adjust content_format if legacy callers requested non-markdown view output.
+        # Explicit storage/ADF formats should be preserved as-is.
         convert_to_markdown = kwargs.get("convert_to_markdown", True)
-        if not convert_to_markdown:
+        if not convert_to_markdown and content_format == "view":
             content_format = "html"
 
         # Process author/creator

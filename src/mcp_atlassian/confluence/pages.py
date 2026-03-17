@@ -19,6 +19,24 @@ logger = logging.getLogger("mcp-atlassian")
 class PagesMixin(ConfluenceClient):
     """Mixin for Confluence page operations."""
 
+    @staticmethod
+    def _resolve_requested_content_format(
+        *,
+        convert_to_markdown: bool,
+        content_format: str | None = None,
+    ) -> str:
+        """Resolve the requested page body representation."""
+        if content_format is None:
+            return "markdown" if convert_to_markdown else "storage"
+
+        if content_format not in {"markdown", "storage", "atlas_doc_format"}:
+            raise ValueError(
+                "content_format must be one of 'markdown', 'storage', "
+                "or 'atlas_doc_format'"
+            )
+
+        return content_format
+
     def _render_page_content(
         self,
         content: str,
@@ -58,9 +76,22 @@ class PagesMixin(ConfluenceClient):
             )
         return None
 
+    @property
+    def _cloud_v2_adapter(self) -> ConfluenceV2Adapter | None:
+        """Get a v2 API adapter for any Confluence Cloud auth mode."""
+        if self.config.is_cloud:
+            return ConfluenceV2Adapter(
+                session=self.confluence._session, base_url=self.confluence.url
+            )
+        return None
+
     @handle_auth_errors("Confluence API")
     def get_page_content(
-        self, page_id: str, *, convert_to_markdown: bool = True
+        self,
+        page_id: str,
+        *,
+        convert_to_markdown: bool = True,
+        content_format: str | None = None,
     ) -> ConfluencePage:
         """
         Get content of a specific page.
@@ -81,17 +112,37 @@ class PagesMixin(ConfluenceClient):
             Exception: If there is an error retrieving the page
         """
         try:
-            # Use v2 API for OAuth, v1 API for token/basic auth
-            v2_adapter = self._v2_adapter
+            requested_content_format = self._resolve_requested_content_format(
+                convert_to_markdown=convert_to_markdown,
+                content_format=content_format,
+            )
+            body_format = (
+                "storage"
+                if requested_content_format in {"markdown", "storage"}
+                else "atlas_doc_format"
+            )
+            render_as_markdown = requested_content_format == "markdown"
+
+            # Use the v2 API for OAuth by default and for Cloud ADF reads.
+            v2_adapter = (
+                self._cloud_v2_adapter
+                if requested_content_format == "atlas_doc_format"
+                else self._v2_adapter
+            )
             if v2_adapter:
                 logger.debug(
-                    f"Using v2 API for OAuth authentication to get page '{page_id}'"
+                    f"Using v2 API to get page '{page_id}' in {body_format} format"
                 )
                 page = v2_adapter.get_page(
                     page_id=page_id,
                     expand="body.storage,version,space,children.attachment",
+                    body_format=body_format,
                 )
             else:
+                if requested_content_format == "atlas_doc_format":
+                    raise ValueError(
+                        "atlas_doc_format page content requires Confluence Cloud"
+                    )
                 logger.debug(
                     "Using v1 API for token/basic"
                     f" authentication to get page '{page_id}'"
@@ -108,10 +159,10 @@ class PagesMixin(ConfluenceClient):
 
             space_key = page.get("space", {}).get("key", "")
             try:
-                content = page["body"]["storage"]["value"]
+                content = page["body"][body_format]["value"]
             except (KeyError, TypeError) as e:
                 logger.warning(
-                    f"Page {page.get('id', 'unknown')} missing body.storage.value: {e}"
+                    f"Page {page.get('id', 'unknown')} missing body.{body_format}.value: {e}"
                 )
                 content = ""
             page_id_str = str(page.get("id", ""))
@@ -120,7 +171,7 @@ class PagesMixin(ConfluenceClient):
             )
             page_content = self._render_page_content(
                 content,
-                convert_to_markdown=convert_to_markdown,
+                convert_to_markdown=render_as_markdown,
                 space_key=space_key,
                 content_id=page_id_str,
                 attachments=page_attachments,
@@ -135,8 +186,9 @@ class PagesMixin(ConfluenceClient):
                 base_url=self.config.url,
                 include_body=True,
                 content_override=page_content,
-                content_format=("storage" if not convert_to_markdown else "markdown"),
+                content_format=requested_content_format,
                 is_cloud=self.config.is_cloud,
+                convert_to_markdown=render_as_markdown,
                 emoji=emoji,
                 page_width=page_width,
             )
@@ -404,7 +456,12 @@ class PagesMixin(ConfluenceClient):
             return False
 
     def get_page_by_title(
-        self, space_key: str, title: str, *, convert_to_markdown: bool = True
+        self,
+        space_key: str,
+        title: str,
+        *,
+        convert_to_markdown: bool = True,
+        content_format: str | None = None,
     ) -> ConfluencePage | None:
         """
         Get a specific page by its title from a Confluence space.
@@ -419,6 +476,11 @@ class PagesMixin(ConfluenceClient):
             ConfluencePage model containing the page content and metadata, or None if not found
         """
         try:
+            requested_content_format = self._resolve_requested_content_format(
+                convert_to_markdown=convert_to_markdown,
+                content_format=content_format,
+            )
+
             # Directly try to find the page by title
             page = self.confluence.get_page_by_title(
                 space=space_key, title=title, expand="body.storage,version"
@@ -431,6 +493,13 @@ class PagesMixin(ConfluenceClient):
                 )
                 return None
 
+            if requested_content_format == "atlas_doc_format":
+                return self.get_page_content(
+                    str(page.get("id", "")),
+                    convert_to_markdown=False,
+                    content_format="atlas_doc_format",
+                )
+
             try:
                 content = page["body"]["storage"]["value"]
             except (KeyError, TypeError) as e:
@@ -440,7 +509,7 @@ class PagesMixin(ConfluenceClient):
                 content = ""
             page_content = self._render_page_content(
                 content,
-                convert_to_markdown=convert_to_markdown,
+                convert_to_markdown=requested_content_format == "markdown",
                 space_key=space_key,
                 content_id=str(page.get("id", "")),
             )
@@ -456,8 +525,9 @@ class PagesMixin(ConfluenceClient):
                 include_body=True,
                 # Override content with our processed version
                 content_override=page_content,
-                content_format="storage" if not convert_to_markdown else "markdown",
+                content_format=requested_content_format,
                 is_cloud=self.config.is_cloud,
+                convert_to_markdown=requested_content_format == "markdown",
                 emoji=emoji,
                 page_width=page_width,
             )
@@ -586,11 +656,15 @@ class PagesMixin(ConfluenceClient):
                 final_body = body
                 representation = content_representation or "storage"
 
-            # Use v2 API for OAuth authentication, v1 API for token/basic auth
-            v2_adapter = self._v2_adapter
+            # Use v2 API for OAuth authentication and for Cloud ADF writes.
+            v2_adapter = (
+                self._cloud_v2_adapter
+                if representation == "atlas_doc_format"
+                else self._v2_adapter
+            )
             if v2_adapter:
                 logger.debug(
-                    f"Using v2 API for OAuth authentication to create page '{title}'"
+                    f"Using v2 API to create page '{title}' with {representation}"
                 )
                 result = v2_adapter.create_page(
                     space_key=space_key,
@@ -603,6 +677,10 @@ class PagesMixin(ConfluenceClient):
                 logger.debug(
                     f"Using v1 API for token/basic authentication to create page '{title}'"
                 )
+                if representation == "atlas_doc_format":
+                    raise ValueError(
+                        "atlas_doc_format page creation requires Confluence Cloud"
+                    )
                 result = self.confluence.create_page(
                     space=space_key,
                     title=title,
@@ -690,11 +768,15 @@ class PagesMixin(ConfluenceClient):
 
             logger.debug(f"Updating page {page_id} with title '{title}'")
 
-            # Use v2 API for OAuth authentication, v1 API for token/basic auth
-            v2_adapter = self._v2_adapter
+            # Use v2 API for OAuth authentication and for Cloud ADF writes.
+            v2_adapter = (
+                self._cloud_v2_adapter
+                if representation == "atlas_doc_format"
+                else self._v2_adapter
+            )
             if v2_adapter:
                 logger.debug(
-                    f"Using v2 API for OAuth authentication to update page '{page_id}'"
+                    f"Using v2 API to update page '{page_id}' with {representation}"
                 )
                 response = v2_adapter.update_page(
                     page_id=page_id,
@@ -707,6 +789,10 @@ class PagesMixin(ConfluenceClient):
                 logger.debug(
                     f"Using v1 API for token/basic authentication to update page '{page_id}'"
                 )
+                if representation == "atlas_doc_format":
+                    raise ValueError(
+                        "atlas_doc_format page updates require Confluence Cloud"
+                    )
                 update_kwargs = {
                     "page_id": page_id,
                     "title": title,

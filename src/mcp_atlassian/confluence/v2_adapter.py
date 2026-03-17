@@ -288,12 +288,14 @@ class ConfluenceV2Adapter:
         self,
         page_id: str,
         expand: str | None = None,
+        body_format: str = "storage",
     ) -> dict[str, Any]:
         """Get a page using the v2 API.
 
         Args:
             page_id: The ID of the page to retrieve
             expand: Fields to expand in the response (not used in v2 API, for compatibility only)
+            body_format: Confluence Cloud body format to request
 
         Returns:
             The page data from the API response in v1-compatible format
@@ -306,7 +308,7 @@ class ConfluenceV2Adapter:
             url = f"{self.base_url}/api/v2/pages/{page_id}"
 
             # Convert v1 expand parameters to v2 format
-            params = {"body-format": "storage"}
+            params = {"body-format": body_format}
 
             response = self.session.get(url, params=params)
             response.raise_for_status()
@@ -319,13 +321,18 @@ class ConfluenceV2Adapter:
             space_key = self._get_space_key_from_id(space_id) if space_id else "unknown"
 
             # Convert v2 response to v1-compatible format
-            v1_compatible = self._convert_v2_to_v1_format(v2_response, space_key)
+            v1_compatible = self._convert_v2_to_v1_format(
+                v2_response, space_key, body_format=body_format
+            )
 
-            # Add body.storage structure if body content exists
-            if "body" in v2_response and v2_response["body"].get("storage"):
-                storage_value = v2_response["body"]["storage"].get("value", "")
+            # Add body in the requested representation if content exists
+            if "body" in v2_response and v2_response["body"].get(body_format):
+                content_value = v2_response["body"][body_format].get("value", "")
                 v1_compatible["body"] = {
-                    "storage": {"value": storage_value, "representation": "storage"}
+                    body_format: {
+                        "value": content_value,
+                        "representation": body_format,
+                    }
                 }
 
             # Add space information with more details
@@ -394,7 +401,11 @@ class ConfluenceV2Adapter:
             raise ValueError(f"Failed to delete page '{page_id}': {e}") from e
 
     def _convert_v2_to_v1_format(
-        self, v2_response: dict[str, Any], space_key: str
+        self,
+        v2_response: dict[str, Any],
+        space_key: str,
+        *,
+        body_format: str = "storage",
     ) -> dict[str, Any]:
         """Convert v2 API response to v1-compatible format.
 
@@ -426,9 +437,9 @@ class ConfluenceV2Adapter:
         # Add body if present in v2 response
         if "body" in v2_response:
             v1_compatible["body"] = {
-                "storage": {
-                    "value": v2_response["body"].get("storage", {}).get("value", ""),
-                    "representation": "storage",
+                body_format: {
+                    "value": v2_response["body"].get(body_format, {}).get("value", ""),
+                    "representation": body_format,
                 }
             }
 

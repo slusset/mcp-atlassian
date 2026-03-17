@@ -2,6 +2,8 @@ name: Docker Publish
 
 on:
   push:
+    branches:
+      - codex/fork-integration
     tags:
       - 'v*.*.*' # Trigger on version tag pushes (e.g., v0.7.1)
   pull_request:
@@ -39,7 +41,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # Create 'main' tag on push to main branch
+            # Create a tag for the pushed branch (e.g., main, codex-fork-integration)
+            type=ref,event=branch
+            # Also create 'main' tag on push to main branch
             type=ref,event=branch,branch=main
             # Create 'X.Y.Z', 'X.Y', 'X' tags on tag push (e.g., v1.2.3 -> 1.2.3, 1.2, 1)
             type=semver,pattern={{version}}
