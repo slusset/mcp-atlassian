@@ -623,7 +623,9 @@ async def create_page(
         content_representation = None  # Will be converted to storage
     else:
         is_markdown = False
-        content_representation = content_format  # Pass supported representation directly
+        content_representation = (
+            content_format  # Pass supported representation directly
+        )
 
     page = confluence_fetcher.create_page(
         space_key=space_key,
@@ -738,7 +740,9 @@ async def update_page(
         content_representation = None  # Will be converted to storage
     else:
         is_markdown = False
-        content_representation = content_format  # Pass supported representation directly
+        content_representation = (
+            content_format  # Pass supported representation directly
+        )
 
     updated_page = confluence_fetcher.update_page(
         page_id=page_id,

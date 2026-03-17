@@ -466,7 +466,9 @@ async def test_get_page_atlas_doc_format(client, mock_confluence_fetcher):
     )
 
     result_data = json.loads(response.content[0].text)
-    assert result_data["metadata"]["content"] == '{"type":"doc","version":1,"content":[]}'
+    assert (
+        result_data["metadata"]["content"] == '{"type":"doc","version":1,"content":[]}'
+    )
     assert result_data["metadata"]["content_format"] == "atlas_doc_format"
 
 
